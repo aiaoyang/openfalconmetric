@@ -176,18 +176,18 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 
 		if _, ok := result[lport]; ok {
 			if _, ok := result[raddr]; ok {
-				info := "remoteIP:" + result[raddr] + "localPort:" + result[lport]
+				info := "remoteIP=" + result[raddr] + "localPort=" + result[lport]
 				in.lines[info]++
 				continue
 			}
-			info := "remoteIP:" + raddr + "localPort:" + result[lport]
+			info := "remoteIP=" + raddr + "localPort=" + result[lport]
 			in.lines[info]++
 			continue
 		}
 		if _, ok := result[rport]; ok {
 			if _, ok := result[raddr]; ok {
-				remotetag := result[raddr] + ":" + result[rport]
-				out.lines[remotetag]++
+				info := "remoteIP=" + result[raddr] + "localPort=" + result[lport]
+				out.lines[info]++
 				continue
 			}
 			remotetag := raddr + ":" + result[rport]
@@ -197,9 +197,9 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 		continue
 
 	}
-	for k, v := range lo.lines {
-		fmt.Printf("key:%s,value:%d\n", k, v)
-	}
+	// for k, v := range lo.lines {
+	// 	fmt.Printf("key:%s,value:%d\n", k, v)
+	// }
 	return in, out, lo, sumConn, nil
 }
 func convHex(hex string) string {
@@ -264,13 +264,7 @@ func putMetricToFalcon() error {
 		out.genMetrics(&msg)
 		lo.genMetrics(&msg)
 		putMetric(&msg)
-		// fmt.Println(msg.Item)
-		// for k, v := range in.lines {
-		// 	fmt.Println(k, v)
-		// }
-
-		// log.Println(msg)
-		fmt.Println("put")
+		// fmt.Println("put")
 		time.Sleep(time.Second * 10)
 	}
 }
