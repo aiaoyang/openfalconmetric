@@ -78,7 +78,7 @@ func (local localConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "LocalConnection"
 	for key, value := range local.lines {
-		metric.Tags = "localport=" + key
+		metric.Tags = key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
 	}
@@ -90,7 +90,7 @@ func (out outConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "OutConnection"
 	for key, value := range out.lines {
-		metric.Tags = "remoteInfo=" + key
+		metric.Tags = key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
 	}
@@ -101,7 +101,7 @@ func (in inConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "InConnection"
 	for key, value := range in.lines {
-		metric.Tags = "remoteinfo=" + key
+		metric.Tags = key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
 	}
