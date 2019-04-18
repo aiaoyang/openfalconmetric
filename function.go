@@ -75,9 +75,10 @@ func getAddressAndPortWithoutHex(s string) (address string, port string) {
 func (local localConLines) genMetrics(msg *message) *message {
 	// m := newOpenFalconMetric(&metric)
 	var metric openfalconMetric
+	newOpenFalconMetric(&metric)
 	metric.Metric = "LocalConnection"
 	for key, value := range local.lines {
-		metric.Tags = key
+		metric.Tags = "localport=" + key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
 	}
@@ -86,9 +87,10 @@ func (local localConLines) genMetrics(msg *message) *message {
 
 func (out outConLines) genMetrics(msg *message) *message {
 	var metric openfalconMetric
+	newOpenFalconMetric(&metric)
 	metric.Metric = "OutConnection"
 	for key, value := range out.lines {
-		metric.Tags = key
+		metric.Tags = "remoteInfo=" + key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
 	}
@@ -96,9 +98,10 @@ func (out outConLines) genMetrics(msg *message) *message {
 }
 func (in inConLines) genMetrics(msg *message) *message {
 	var metric openfalconMetric
+	newOpenFalconMetric(&metric)
 	metric.Metric = "InConnection"
 	for key, value := range in.lines {
-		metric.Tags = key
+		metric.Tags = "remoteinfo=" + key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
 	}
@@ -158,32 +161,40 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 		raddr, rport := getAddressAndPortWithoutHex(remote)
 		// fmt.Printf("localPort=%s\nremoteAddr=%s,remotePort=%s\n", lport, raddr, rport)
 		// fmt.Println(lo.lines[result[rport]])
-
 		if result[raddr] == "localhost" {
-			port := result[rport]
-			lo.lines[port]++
+			// if strconv.ParseInt(rport, 16, 32) > 10000 {
+			// 	continue
+			// }
+			if _, ok := result[rport]; ok {
+				port := result[rport]
+				lo.lines[port]++
+				continue
+			}
+			lo.lines[rport]++
+			continue
 		}
 
-		if _, ok := result[lport]; !ok {
-			if _, ok := result[raddr]; !ok {
-				fmt.Println(lport, raddr, "1")
+		if _, ok := result[lport]; ok {
+			if _, ok := result[raddr]; ok {
+				info := "remoteIP:" + result[raddr] + "localPort:" + result[lport]
+				in.lines[info]++
 				continue
 			}
-			fmt.Println(rport, raddr, "2")
-			remoteInfo := result[raddr] + ":" + rport
-			remoteinfo := result[remoteInfo]
-			out.lines[remoteinfo]++
+			info := "remoteIP:" + raddr + "localPort:" + result[lport]
+			in.lines[info]++
 			continue
 		}
-		if _, ok := result[rport]; !ok {
-			if _, ok := result[raddr]; !ok {
+		if _, ok := result[rport]; ok {
+			if _, ok := result[raddr]; ok {
+				remotetag := result[raddr] + ":" + result[rport]
+				out.lines[remotetag]++
 				continue
 			}
-			addr := result[raddr]
-			out.lines[addr]++
+			remotetag := raddr + ":" + result[rport]
+			out.lines[remotetag]++
 			continue
 		}
-		in.lines[result[lport]]++
+		continue
 
 	}
 	for k, v := range lo.lines {
@@ -230,6 +241,7 @@ func convHex(hex string) string {
 }
 func putMetric(msg *message) {
 	jsonStr, _ := json.Marshal(msg.Item)
+	fmt.Printf("%s", jsonStr)
 	req, err := http.NewRequest("POST", APIURL, bytes.NewBuffer([]byte(jsonStr)))
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
@@ -252,6 +264,7 @@ func putMetricToFalcon() error {
 		out.genMetrics(&msg)
 		lo.genMetrics(&msg)
 		putMetric(&msg)
+		// fmt.Println(msg.Item)
 		// for k, v := range in.lines {
 		// 	fmt.Println(k, v)
 		// }
