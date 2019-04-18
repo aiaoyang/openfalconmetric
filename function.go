@@ -78,6 +78,9 @@ func (local localConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "LocalConnection"
 	for key, value := range local.lines {
+		if value < 20 {
+			continue
+		}
 		metric.Tags = key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
@@ -90,6 +93,9 @@ func (out outConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "OutConnection"
 	for key, value := range out.lines {
+		if value < 20 {
+			continue
+		}
 		metric.Tags = key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
@@ -101,6 +107,9 @@ func (in inConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "InConnection"
 	for key, value := range in.lines {
+		if value < 20 {
+			continue
+		}
 		metric.Tags = key
 		metric.Value = value - 1
 		msg.Item = append(msg.Item, metric)
@@ -161,10 +170,13 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 		raddr, rport := getAddressAndPortWithoutHex(remote)
 		// fmt.Printf("localPort=%s\nremoteAddr=%s,remotePort=%s\n", lport, raddr, rport)
 		// fmt.Println(lo.lines[result[rport]])
+
+		// 如果远程地址是127.0.0.1 那么该连接是本机内部连接
 		if result[raddr] == "localhost" {
 			// if strconv.ParseInt(rport, 16, 32) > 10000 {
 			// 	continue
 			// }
+			// 如果远程端口号已知，则是已知服务，否则为未知端口服务
 			if _, ok := result[rport]; ok {
 				info := "localPort=" + result[rport]
 				lo.lines[info]++
@@ -175,6 +187,7 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 			continue
 		}
 
+		//如果本地端口已知，且远程端口已知，则是公司内部的服务访问，否则是外部服务的访问请求
 		if _, ok := result[lport]; ok {
 			if _, ok := result[raddr]; ok {
 				info := "srcIP=" + result[raddr] + "," + "localPort=" + result[lport]
@@ -185,6 +198,8 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 			in.lines[info]++
 			continue
 		}
+
+		// 如果远程端口已知，且远程地址已知，则是本机向公司内部已知的服务发器的请求，否则是向未知的服务发起请求
 		if _, ok := result[rport]; ok {
 			if _, ok := result[raddr]; ok {
 				info := "dstIP=" + result[raddr] + "," + "dstPort=" + result[rport]
@@ -196,6 +211,7 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 			out.lines[info]++
 			continue
 		}
+		// 其他请求包括：未知地址或未知端口向本机未知端口发起的请求，本机未知端口向未知地址发起的请求
 		continue
 
 	}
