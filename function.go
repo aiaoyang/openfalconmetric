@@ -166,32 +166,34 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 			// 	continue
 			// }
 			if _, ok := result[rport]; ok {
-				port := result[rport]
-				lo.lines[port]++
+				info := "localPort=" + result[rport]
+				lo.lines[info]++
 				continue
 			}
-			lo.lines[rport]++
+			info := "localPort=" + rport
+			lo.lines[info]++
 			continue
 		}
 
 		if _, ok := result[lport]; ok {
 			if _, ok := result[raddr]; ok {
-				info := "remoteIP=" + result[raddr] + "localPort=" + result[lport]
+				info := "srcIP=" + result[raddr] + "," + "localPort=" + result[lport]
 				in.lines[info]++
 				continue
 			}
-			info := "remoteIP=" + raddr + "localPort=" + result[lport]
+			info := "srcIP=" + raddr + "," + "localPort=" + result[lport]
 			in.lines[info]++
 			continue
 		}
 		if _, ok := result[rport]; ok {
 			if _, ok := result[raddr]; ok {
-				info := "remoteIP=" + result[raddr] + "localPort=" + result[lport]
+				info := "dstIP=" + result[raddr] + "," + "dstPort=" + result[rport]
 				out.lines[info]++
 				continue
 			}
-			remotetag := raddr + ":" + result[rport]
-			out.lines[remotetag]++
+			info := "dstIP=" + raddr + "," + "dstPort=" + result[rport]
+			// remotetag := raddr + ":" + result[rport]
+			out.lines[info]++
 			continue
 		}
 		continue
