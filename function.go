@@ -187,7 +187,7 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 			continue
 		}
 
-		//如果本地端口已知，且远程端口已知，则是公司内部的服务访问，否则是外部服务的访问请求
+		//如果本地端口已知，且远程地址已知，则是公司内部的服务访问，否则是外部服务的访问请求
 		if _, ok := result[lport]; ok {
 			if _, ok := result[raddr]; ok {
 				info := "srcIP=" + result[raddr] + "," + "localPort=" + result[lport]
@@ -195,6 +195,8 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 				continue
 			}
 			info := "srcIP=" + raddr + "," + "localPort=" + result[lport]
+			inConut := "localPort=" + result[lport]
+			in.lines[inConut]++
 			in.lines[info]++
 			continue
 		}
@@ -212,23 +214,43 @@ func getLines(file string) (inConLines, outConLines, localConLines, int, error) 
 			continue
 		}
 		// 其他请求包括：未知地址或未知端口向本机未知端口发起的请求，本机未知端口向未知地址发起的请求
-		continue
+		// continue
 
 	}
-	// for k, v := range lo.lines {
-	// 	fmt.Printf("key:%s,value:%d\n", k, v)
-	// }
+	for k, v := range in.lines {
+		fmt.Printf("key:%s,value:%d\n", k, v)
+	}
 	return in, out, lo, sumConn, nil
 }
 func convHex(hex string) string {
+	// if strings.Contains(hex, ":") {
+	// 	// switch len(hex) {
+	// 	// case 13:
+	// 	s1 := strings.Split(hex, ":")
+	// 	s := convHex(s1[0]) + " : " + convHex(s1[1])
+	// 	return s
+	// 	// case 37:
+	// 	// 	s1 := strings.Split(hex, ":")
+	// 	// 	s := convHex(s1[0]) + convHex(s1[1])
+	// 	// 	return s
+	// 	// }
+	// }
 	switch len(hex) {
-	case 13:
-		if !strings.Contains(hex, ":") {
-			return ""
-		}
-		s1 := strings.Split(hex, ":")
-		s := convHex(s1[0]) + convHex(s1[1])
-		return s
+	case 32:
+		return "ip6"
+		// d := strings.Join(strings.Split(convHex(hex[0:8]), "."), "")
+		// c := strings.Join(strings.Split(convHex(hex[8:16]), "."), "")
+		// b := strings.Join(strings.Split(convHex(hex[16:24]), "."), "")
+		// a := strings.Join(strings.Split(convHex(hex[24:32]), "."), "")
+		// d := convHex(hex[0:8])
+		// c := convHex(hex[8:16])
+		// b := convHex(hex[16:24])
+		// a := convHex(hex[24:32])
+
+		// ip := fmt.Sprintf("%s:%s:%s:%s", a, b, c, d)
+		// ipv6 := strings.Join(strings.Split(ip, "."), "")
+		// return ipv6
+
 	case 2:
 		netstat, _ := strconv.ParseUint(hex, 16, 32)
 		// if err != nil {
@@ -257,6 +279,57 @@ func convHex(hex string) string {
 		return ""
 	}
 }
+
+// func convHex(hex string) string {
+// 	if strings.Contains(hex, ":") {
+// 		// switch len(hex) {
+// 		// case 13:
+// 		s1 := strings.Split(hex, ":")
+// 		s := convHex(s1[0]) + convHex(s1[1])
+// 		return s
+// 		// case 37:
+// 		// 	s1 := strings.Split(hex, ":")
+// 		// 	s := convHex(s1[0]) + convHex(s1[1])
+// 		// 	return s
+// 		// }
+// 	}
+// 	switch len(hex) {
+// 	case 32:
+// 		d, _ := strconv.ParseUint(hex[0:8], 16, 32)
+// 		c, _ := strconv.ParseUint(hex[8:16], 16, 32)
+// 		b, _ := strconv.ParseUint(hex[16:24], 16, 32)
+// 		a, _ := strconv.ParseUint(hex[24:32], 16, 32)
+// 		ipad := fmt.Sprintf("%d:%d:%d:%d", uint32(a), uint32(b), uint32(c), uint32(d))
+// 		return ipad
+
+// 	case 2:
+// 		netstat, _ := strconv.ParseUint(hex, 16, 32)
+// 		// if err != nil {
+// 		// 	return "", err
+// 		// }
+// 		return fmt.Sprintf("%d", uint32(netstat))
+// 	case 4:
+// 		port, _ := strconv.ParseUint(hex, 16, 32)
+// 		// if err != nil {
+// 		// 	return "", err
+// 		// }
+// 		return fmt.Sprintf("%d", uint32(port))
+// 	case 8:
+// 		// 获取到的16进制字符串转换后的十进制字符串与一般的ip地址互为反转
+// 		// 例如 127.0.0.1 的16进制字符串转换后的ip地址为1.0.0.127
+// 		d, _ := strconv.ParseUint(hex[0:2], 16, 32)
+// 		c, _ := strconv.ParseUint(hex[2:4], 16, 32)
+// 		b, _ := strconv.ParseUint(hex[4:6], 16, 32)
+// 		a, _ := strconv.ParseUint(hex[6:8], 16, 32)
+// 		// if err != nil {
+// 		// 	return "", err
+// 		// }
+// 		ipad := fmt.Sprintf("%d.%d.%d.%d", uint32(a), uint32(b), uint32(c), uint32(d))
+// 		return ipad
+// 	default:
+// 		return ""
+// 	}
+// }
 func putMetric(msg *message) {
 	jsonStr, _ := json.Marshal(msg.Item)
 	fmt.Printf("%s", jsonStr)
