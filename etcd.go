@@ -31,6 +31,7 @@ conn:
 	}
 	cli, err := clientv3.New(cfg)
 	if err != nil {
+		log.Println(err)
 		time.Sleep(time.Second * 3)
 		goto conn
 	}
