@@ -1,15 +1,14 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
-	"strconv"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -17,9 +16,18 @@ import (
 var (
 	post   message
 	metric openfalconMetric
-	file   = "/proc/net/tcp"
+
+	// pid    = fmt.Sprintf("%d", os.Getpid())
 )
 
+type SockTabEntry struct {
+	ino        string
+	LocalAddr  string
+	LocalPort  string
+	RemoteAddr string
+	RemotePort string
+	Process    string
+}
 type message struct {
 	Item []openfalconMetric `json:"item"`
 }
@@ -63,13 +71,80 @@ func (this *localConLines) init() {
 	this.lines = make(map[string]int)
 }
 
-func getAddressAndPortWithoutHex(s string) (address string, port string) {
-	if !strings.Contains(s, ":") {
-		return "", ""
+// func dothings() (inConLines, outConLines, localConLines, error) {
+func dothings() (outConLines, error) {
+
+	// s, err := netstat.TCPSocks(netstat.NoopFilter)
+	s := getStruct()
+
+	// var in inConLines
+	var out outConLines
+	// var lo localConLines
+	// in.init()
+	out.init()
+	// lo.init()
+	result := GetETCDKeyValues()
+	for k, v := range result {
+		fmt.Println(k, v)
 	}
-	address = strings.Split(s, ":")[0]
-	port = strings.Split(s, ":")[1]
-	return convHex(address), convHex(port)
+	for _, socket := range s {
+
+		raddr := socket.RemoteAddr
+		rport := socket.RemoteAddr
+		// lport := socket.LocalAddr.StringPort()
+		if socket.Process == "" {
+			continue
+		}
+
+		// // fmt.Printf("%v", socket.Process)
+		process := socket.Process
+		// // fmt.Printf("rport:%s raddr:%s lport:%s process:%s\n", rport, raddr, lport, process)
+		// // fmt.Println(processName)
+		// // process := socket.Process.String()
+		// if result[raddr] == "localhost" {
+		// 	// if strconv.ParseInt(rport, 16, 32) > 10000 {
+		// 	// 	continue
+		// 	// }
+		// 	// 如果远程端口号已知，则是已知服务，否则为未知端口服务
+		// 	if _, ok := result[rport]; ok {
+		// 		info := "localPort=" + result[rport]
+		// 		lo.lines[info]++
+		// 		continue
+		// 	}
+		// 	info := "localPort=" + rport
+		// 	lo.lines[info]++
+		// 	continue
+		// }
+
+		// //如果本地端口已知，且远程地址已知，则是公司内部的服务访问，否则是外部服务的访问请求
+		// if _, ok := result[lport]; ok {
+		// 	if _, ok := result[raddr]; ok {
+		// 		info := "srcIP=" + result[raddr] + "," + "localPort=" + result[lport]
+		// 		in.lines[info]++
+		// 		continue
+		// 	}
+		// 	info := "srcIP=" + raddr + "," + "localPort=" + result[lport]
+		// 	inConut := "localPort=" + result[lport]
+		// 	in.lines[inConut]++
+		// 	in.lines[info]++
+		// 	continue
+		// }
+
+		// 如果远程端口已知，且远程地址已知，则是本机向公司内部已知的服务发器的请求，否则是向未知的服务发起请求
+		if _, ok := result[rport]; ok {
+			if _, ok := result[raddr]; ok {
+				info := "dstIP=" + result[raddr] + "," + "dstPort=" + result[rport] + "," + "process=" + process
+				out.lines[info]++
+				continue
+			}
+			info := "dstIP=" + raddr + "," + "dstPort=" + result[rport] + "," + "process=" + process
+			out.lines[info]++
+			continue
+		}
+	}
+	// return in, out, lo, nil
+	return out, nil
+
 }
 
 func (local localConLines) genMetrics(msg *message) *message {
@@ -78,7 +153,7 @@ func (local localConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "LocalConnection"
 	for key, value := range local.lines {
-		if value < 20 {
+		if value < 10 {
 			continue
 		}
 		metric.Tags = key
@@ -93,7 +168,7 @@ func (out outConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "OutConnection"
 	for key, value := range out.lines {
-		if value < 20 {
+		if value < 10 {
 			continue
 		}
 		metric.Tags = key
@@ -107,7 +182,7 @@ func (in inConLines) genMetrics(msg *message) *message {
 	newOpenFalconMetric(&metric)
 	metric.Metric = "InConnection"
 	for key, value := range in.lines {
-		if value < 20 {
+		if value < 10 {
 			continue
 		}
 		metric.Tags = key
@@ -128,208 +203,12 @@ func newOpenFalconMetric(metric *openfalconMetric) *openfalconMetric {
 	return &openfalconMetric{}
 	// }
 }
-func getLines(file string) (inConLines, outConLines, localConLines, int, error) {
-	var in inConLines
-	var out outConLines
-	var lo localConLines
-	in.init()
-	out.init()
-	lo.init()
 
-	f, err := ioutil.ReadFile(file)
-	if err != nil {
-		return in, out, lo, 0, err
-	}
-	result := GetETCDKeyValues()
-	for k, v := range result {
-		fmt.Println(k, v)
-	}
-	buf := bufio.NewReader(bytes.NewBuffer(f))
-	var sumConn = 0
-	for {
-		bline, _, err := buf.ReadLine()
-		if err == io.EOF {
-			err = nil
-			break
-		}
-		if err != nil {
-			return in, out, lo, 0, err
-		}
-		sumConn++
-		sline := fmt.Sprintf("%s", bline)
-		if strings.Contains(sline, "local_address") {
-			continue
-		}
-		s := strings.Fields(sline)
-		local := s[1]
-		remote := s[2]
-		// local := strings.Split(s[1], ":")
-		// remote := strings.Split(s[2], ":")
-		// fmt.Println(local, remote)
-		_, lport := getAddressAndPortWithoutHex(local)
-		raddr, rport := getAddressAndPortWithoutHex(remote)
-		// fmt.Printf("localPort=%s\nremoteAddr=%s,remotePort=%s\n", lport, raddr, rport)
-		// fmt.Println(lo.lines[result[rport]])
-
-		// 如果远程地址是127.0.0.1 那么该连接是本机内部连接
-		if result[raddr] == "localhost" {
-			// if strconv.ParseInt(rport, 16, 32) > 10000 {
-			// 	continue
-			// }
-			// 如果远程端口号已知，则是已知服务，否则为未知端口服务
-			if _, ok := result[rport]; ok {
-				info := "localPort=" + result[rport]
-				lo.lines[info]++
-				continue
-			}
-			info := "localPort=" + rport
-			lo.lines[info]++
-			continue
-		}
-
-		//如果本地端口已知，且远程地址已知，则是公司内部的服务访问，否则是外部服务的访问请求
-		if _, ok := result[lport]; ok {
-			if _, ok := result[raddr]; ok {
-				info := "srcIP=" + result[raddr] + "," + "localPort=" + result[lport]
-				in.lines[info]++
-				continue
-			}
-			info := "srcIP=" + raddr + "," + "localPort=" + result[lport]
-			inConut := "localPort=" + result[lport]
-			in.lines[inConut]++
-			in.lines[info]++
-			continue
-		}
-
-		// 如果远程端口已知，且远程地址已知，则是本机向公司内部已知的服务发器的请求，否则是向未知的服务发起请求
-		if _, ok := result[rport]; ok {
-			if _, ok := result[raddr]; ok {
-				info := "dstIP=" + result[raddr] + "," + "dstPort=" + result[rport]
-				out.lines[info]++
-				continue
-			}
-			info := "dstIP=" + raddr + "," + "dstPort=" + result[rport]
-			// remotetag := raddr + ":" + result[rport]
-			out.lines[info]++
-			continue
-		}
-		// 其他请求包括：未知地址或未知端口向本机未知端口发起的请求，本机未知端口向未知地址发起的请求
-		// continue
-
-	}
-	for k, v := range in.lines {
-		fmt.Printf("key:%s,value:%d\n", k, v)
-	}
-	return in, out, lo, sumConn, nil
-}
-func convHex(hex string) string {
-	// if strings.Contains(hex, ":") {
-	// 	// switch len(hex) {
-	// 	// case 13:
-	// 	s1 := strings.Split(hex, ":")
-	// 	s := convHex(s1[0]) + " : " + convHex(s1[1])
-	// 	return s
-	// 	// case 37:
-	// 	// 	s1 := strings.Split(hex, ":")
-	// 	// 	s := convHex(s1[0]) + convHex(s1[1])
-	// 	// 	return s
-	// 	// }
-	// }
-	switch len(hex) {
-	case 32:
-		return "ip6"
-		// d := strings.Join(strings.Split(convHex(hex[0:8]), "."), "")
-		// c := strings.Join(strings.Split(convHex(hex[8:16]), "."), "")
-		// b := strings.Join(strings.Split(convHex(hex[16:24]), "."), "")
-		// a := strings.Join(strings.Split(convHex(hex[24:32]), "."), "")
-		// d := convHex(hex[0:8])
-		// c := convHex(hex[8:16])
-		// b := convHex(hex[16:24])
-		// a := convHex(hex[24:32])
-
-		// ip := fmt.Sprintf("%s:%s:%s:%s", a, b, c, d)
-		// ipv6 := strings.Join(strings.Split(ip, "."), "")
-		// return ipv6
-
-	case 2:
-		netstat, _ := strconv.ParseUint(hex, 16, 32)
-		// if err != nil {
-		// 	return "", err
-		// }
-		return fmt.Sprintf("%d", uint32(netstat))
-	case 4:
-		port, _ := strconv.ParseUint(hex, 16, 32)
-		// if err != nil {
-		// 	return "", err
-		// }
-		return fmt.Sprintf("%d", uint32(port))
-	case 8:
-		// 获取到的16进制字符串转换后的十进制字符串与一般的ip地址互为反转
-		// 例如 127.0.0.1 的16进制字符串转换后的ip地址为1.0.0.127
-		d, _ := strconv.ParseUint(hex[0:2], 16, 32)
-		c, _ := strconv.ParseUint(hex[2:4], 16, 32)
-		b, _ := strconv.ParseUint(hex[4:6], 16, 32)
-		a, _ := strconv.ParseUint(hex[6:8], 16, 32)
-		// if err != nil {
-		// 	return "", err
-		// }
-		ipad := fmt.Sprintf("%d.%d.%d.%d", uint32(a), uint32(b), uint32(c), uint32(d))
-		return ipad
-	default:
-		return ""
-	}
+func getHexInode(hexline string) string {
+	inode := strings.Fields(hexline)[11]
+	return inode
 }
 
-// func convHex(hex string) string {
-// 	if strings.Contains(hex, ":") {
-// 		// switch len(hex) {
-// 		// case 13:
-// 		s1 := strings.Split(hex, ":")
-// 		s := convHex(s1[0]) + convHex(s1[1])
-// 		return s
-// 		// case 37:
-// 		// 	s1 := strings.Split(hex, ":")
-// 		// 	s := convHex(s1[0]) + convHex(s1[1])
-// 		// 	return s
-// 		// }
-// 	}
-// 	switch len(hex) {
-// 	case 32:
-// 		d, _ := strconv.ParseUint(hex[0:8], 16, 32)
-// 		c, _ := strconv.ParseUint(hex[8:16], 16, 32)
-// 		b, _ := strconv.ParseUint(hex[16:24], 16, 32)
-// 		a, _ := strconv.ParseUint(hex[24:32], 16, 32)
-// 		ipad := fmt.Sprintf("%d:%d:%d:%d", uint32(a), uint32(b), uint32(c), uint32(d))
-// 		return ipad
-
-// 	case 2:
-// 		netstat, _ := strconv.ParseUint(hex, 16, 32)
-// 		// if err != nil {
-// 		// 	return "", err
-// 		// }
-// 		return fmt.Sprintf("%d", uint32(netstat))
-// 	case 4:
-// 		port, _ := strconv.ParseUint(hex, 16, 32)
-// 		// if err != nil {
-// 		// 	return "", err
-// 		// }
-// 		return fmt.Sprintf("%d", uint32(port))
-// 	case 8:
-// 		// 获取到的16进制字符串转换后的十进制字符串与一般的ip地址互为反转
-// 		// 例如 127.0.0.1 的16进制字符串转换后的ip地址为1.0.0.127
-// 		d, _ := strconv.ParseUint(hex[0:2], 16, 32)
-// 		c, _ := strconv.ParseUint(hex[2:4], 16, 32)
-// 		b, _ := strconv.ParseUint(hex[4:6], 16, 32)
-// 		a, _ := strconv.ParseUint(hex[6:8], 16, 32)
-// 		// if err != nil {
-// 		// 	return "", err
-// 		// }
-// 		ipad := fmt.Sprintf("%d.%d.%d.%d", uint32(a), uint32(b), uint32(c), uint32(d))
-// 		return ipad
-// 	default:
-// 		return ""
-// 	}
-// }
 func putMetric(msg *message) {
 	jsonStr, _ := json.Marshal(msg.Item)
 	fmt.Printf("%s", jsonStr)
@@ -346,16 +225,77 @@ func putMetric(msg *message) {
 
 func putMetricToFalcon() error {
 	for {
-		in, out, lo, _, err := getLines(File)
+		// in, out, lo, err := dothings()
+		out, err := dothings()
+
 		if err != nil {
 			return err
 		}
 		var msg message
-		in.genMetrics(&msg)
+		// in.genMetrics(&msg)
 		out.genMetrics(&msg)
-		lo.genMetrics(&msg)
+		// lo.genMetrics(&msg)
+		// for k, v := range lo.lines {
+		// 	fmt.Println(k, v)
+		// }
+		// fmt.Printf("%v", msg)
 		putMetric(&msg)
-		// fmt.Println("put")
+		fmt.Println("put")
 		time.Sleep(time.Second * 10)
 	}
+}
+
+func getStruct() []SockTabEntry {
+	var socket SockTabEntry
+	var sockets []SockTabEntry
+	for _, v := range getFiled() {
+		filed1 := strings.Split(v[3], ":")
+		socket.LocalAddr = filed1[0]
+		socket.LocalPort = filed1[1]
+		filed2 := strings.Split(v[4], ":")
+		socket.RemoteAddr = filed2[0]
+		socket.RemotePort = filed2[1]
+		sockets = append(sockets, socket)
+		socket.Process = v[len(v)-1]
+	}
+	return sockets
+}
+
+func getFiled() [][]string {
+	var str [][]string
+	var buf bytes.Buffer
+	cmd := exec.Command("netstat", "-anp")
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	if err != nil {
+		log.Println(err)
+	}
+	cmd.Wait()
+	for {
+		var bt byte
+		bt = 10
+		b, err := buf.ReadString(bt)
+		// b, err := buf.ReadByte()
+		// buf.ReadString()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !strings.Contains(b, "ESTABLISHED") {
+			continue
+		}
+		if strings.Contains(b, "tcp6") {
+			continue
+		}
+		if strings.Contains(b, "tcp") {
+			str = append(str, strings.Fields(b))
+		} else {
+			continue
+		}
+
+	}
+	return str
+
 }
