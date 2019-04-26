@@ -90,14 +90,12 @@ func dothings() (outConLines, error) {
 	for _, socket := range s {
 
 		raddr := socket.RemoteAddr
-		rport := socket.RemoteAddr
-		// lport := socket.LocalAddr.StringPort()
-		if socket.Process == "" {
+		rport := socket.RemotePort
+		process := socket.Process
+		if process == "" {
 			continue
 		}
 
-		// // fmt.Printf("%v", socket.Process)
-		process := socket.Process
 		// // fmt.Printf("rport:%s raddr:%s lport:%s process:%s\n", rport, raddr, lport, process)
 		// // fmt.Println(processName)
 		// // process := socket.Process.String()
@@ -137,9 +135,10 @@ func dothings() (outConLines, error) {
 				out.lines[info]++
 				continue
 			}
+			// if strings.Contains()
 			info := "dstIP=" + raddr + "," + "dstPort=" + result[rport] + "," + "process=" + process
 			out.lines[info]++
-			continue
+			// continue
 		}
 	}
 	// return in, out, lo, nil
@@ -255,8 +254,8 @@ func getStruct() []SockTabEntry {
 		filed2 := strings.Split(v[4], ":")
 		socket.RemoteAddr = filed2[0]
 		socket.RemotePort = filed2[1]
+		socket.Process = v[6]
 		sockets = append(sockets, socket)
-		socket.Process = v[len(v)-1]
 	}
 	return sockets
 }
@@ -275,8 +274,6 @@ func getFiled() [][]string {
 		var bt byte
 		bt = 10
 		b, err := buf.ReadString(bt)
-		// b, err := buf.ReadByte()
-		// buf.ReadString()
 		if err == io.EOF {
 			break
 		}
@@ -291,10 +288,7 @@ func getFiled() [][]string {
 		}
 		if strings.Contains(b, "tcp") {
 			str = append(str, strings.Fields(b))
-		} else {
-			continue
 		}
-
 	}
 	return str
 
